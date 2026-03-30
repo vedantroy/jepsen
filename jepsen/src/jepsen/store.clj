@@ -376,12 +376,16 @@
   "Writes out history.txt and history.edn files."
   [test]
   (->> [(future
+          (info "debug: save-1: writing history.txt")
           (util/with-thread-name "jepsen history.txt"
-            (util/pwrite-history! (path! test "history.txt") (:history test))))
+            (util/pwrite-history! (path! test "history.txt") (:history test)))
+          (info "debug: save-1: wrote history.txt"))
         (future
+          (info "debug: save-1: writing history.edn")
           (util/with-thread-name "jepsen history.edn"
             (util/pwrite-history! (path! test "history.edn") prn
-                                  (:history test))))]
+                                  (:history test)))
+          (info "debug: save-1: wrote history.edn"))]
        (map deref)
        dorun))
 
@@ -439,13 +443,17 @@
   be preserved for calls to save-2!"
   [test]
   (let [stest   (serializable-test test)
-        jepsen  (future (util/with-thread-name "jepsen format"
+        jepsen  (future (info "debug: save-1: writing test.jepsen")
+                        (util/with-thread-name "jepsen format"
                           (store.format/write-test-with-history!
-                            (:handle (:store test)) stest)))
+                            (:handle (:store test)) stest))
+                        (info "debug: save-1: wrote test.jepsen"))
         history (future (util/with-thread-name "jepsen history"
                           (write-history! stest)))]
     @jepsen @history
+    (info "debug: save-1: updating symlinks")
     (update-symlinks! test)
+    (info "debug: save-1: save complete")
     ; We want to merge the jepsen writer's metadata back into the original test.
     (vary-meta test merge (meta @jepsen))))
 
