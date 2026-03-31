@@ -1,7 +1,8 @@
 (ns jepsen.nemesis
   (:require [clojure.set :as set]
-            [clojure.java.io :as io]
-            [clojure.tools.logging :refer [info warn]]
+ 	        [clojure.java.io :as io]
+	            [clojure.string :as str]
+             [clojure.tools.logging :refer [info warn]]
             [fipp.ednize :as fipp.ednize]
             [jepsen [client   :as client]
                     [control  :as c]
@@ -596,12 +597,29 @@
   "Where do we install the bitflip utility?"
   "/opt/jepsen/bitflip")
 
+(defn linux-arch
+  "Maps `uname -m` to the bitflip release architecture suffix."
+  []
+  (case (str/trim (c/exec :uname :-m))
+    "x86_64"  "x86_64"
+    "aarch64" "arm64"
+    "arm64"   "arm64"
+    (throw+ {:type ::unsupported-arch
+             :arch (str/trim (c/exec :uname :-m))})))
+
+(defn bitflip-url
+  []
+  (str "https://github.com/aybabtme/bitflip/releases/download/v0.2.2/"
+       "bitflip_.0.2.2_Linux_"
+       (linux-arch)
+       ".tar.gz"))
+
 (defrecord Bitflip []
   Nemesis
   (setup! [this test]
     (c/with-test-nodes test
       (c/su
-        (cu/install-archive! "https://github.com/aybabtme/bitflip/releases/download/v0.2.0/bitflip_0.2.0_Linux_x86_64.tar.gz" bitflip-dir))
+        (cu/install-archive! (bitflip-url) bitflip-dir))
       this)
     this)
 
