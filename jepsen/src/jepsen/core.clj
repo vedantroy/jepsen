@@ -228,15 +228,18 @@
   post-processing on the history, run the checker, and write the test to disk
   again. Takes a test map. Returns a new test with results."
   [test]
-  (info "Analyzing...")
-  (let [test (assoc test :results (checker/check-safe
-                                    (:checker test)
-                                    test
-                                    (:history test)))]
-    (info "Analysis complete")
-    (if (:name test)
-      (store/save-2! test)
-      test)))
+  (if (:history-only? test)
+    (do (info "Skipping analysis by request (--history-only)")
+        (assoc test :results {:valid? :history-only}))
+    (do (info "Analyzing...")
+        (let [test (assoc test :results (checker/check-safe
+                                           (:checker test)
+                                           test
+                                           (:history test)))]
+          (info "Analysis complete")
+          (if (:name test)
+            (store/save-2! test)
+            test)))))
 
 (defn log-results
   "Logs info about the results of a test to stdout, and returns test."
@@ -250,6 +253,7 @@
           (case (:valid? (:results test))
             false     "Analysis invalid! (ﾉಥ益ಥ）ﾉ ┻━┻"
             :unknown  "Errors occurred during analysis, but no anomalies found. ಠ~ಠ"
+            :history-only "Analysis skipped; history saved to disk."
             true      "Everything looks good! ヽ(‘ー`)ノ")))
   test)
 

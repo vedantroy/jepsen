@@ -130,6 +130,9 @@
    [nil "--leave-db-running" "Leave the database running at the end of the test., so you can inspect it."
     :default false]
 
+   [nil "--history-only" "Save history artifacts but skip checker analysis and results.edn generation."
+    :default false]
+
    [nil "--logging-json" "Use JSON structured output in the Jepsen log."
     :default false]
 
@@ -284,6 +287,7 @@ Options:\n")
   (-> parsed
       rename-ssh-options
       (rename-options {:leave-db-running :leave-db-running?})
+      (rename-options {:history-only :history-only?})
       (rename-options {:logging-json :logging-json?})
       parse-nodes
       parse-concurrency))
@@ -426,14 +430,15 @@ Options:\n")
            :opt-fn   opt-fn
            :usage    (:usage opts test-usage)
            :run      (fn [{:keys [options]}]
-                       (info "Test options:\n"
-                             (with-out-str (pprint options)))
-                       (doseq [i (range (:test-count options))]
-                         (let [test (jepsen/run! (test-fn options))]
-                           (case (:valid? (:results test))
-                             false    (System/exit 1)
-                             :unknown (System/exit 2)
-                             nil))))}
+                        (info "Test options:\n"
+                              (with-out-str (pprint options)))
+                        (doseq [i (range (:test-count options))]
+                          (let [test (jepsen/run! (test-fn options))]
+                            (case (:valid? (:results test))
+                              false    (System/exit 1)
+                              :unknown (System/exit 2)
+                              :history-only nil
+                              nil))))}
 
    "analyze"
    {:opt-spec [["-t" "--test INDEX_OR_PATH" "Index (e.g. -1 for most recent) or path to a Jepsen test file."
@@ -457,13 +462,16 @@ Options:\n")
                                  "Unable to load test")
                       ; Reparse original CLI options as if it had been a test
                       ; cmd
-                      {:keys [options arguments summary errors] :as parsed-opts}
-                      (-> (next argv) (cli/parse-opts opt-spec) opt-fn)
-                      ; And construct a test from those opts
-                      cli-test    (test-fn options)
-                      test (-> cli-test
-                               (merge (dissoc stored-test :results))
-                               (vary-meta merge (meta stored-test)))]
+                       {:keys [options arguments summary errors] :as parsed-opts}
+                       (-> (next argv) (cli/parse-opts opt-spec) opt-fn)
+                       parsed-opts (update parsed-opts :options dissoc :history-only?)
+                       options (:options parsed-opts)
+                       ; And construct a test from those opts
+                       cli-test    (test-fn options)
+                       test (-> cli-test
+                                (merge (dissoc stored-test :results :history-only?))
+                                (assoc :history-only? false)
+                                (vary-meta merge (meta stored-test)))]
 
                   (binding [*print-length* 32]
                     (info "Combined test:\n"
@@ -504,23 +512,28 @@ Options:\n")
     (println "\n# Successful tests\n")
     (dorun (map println (results true))))
 
-  (when (seq (results :unknown))
-    (println "\n# Indeterminate tests\n")
-    (dorun (map println (results :unknown))))
+   (when (seq (results :unknown))
+     (println "\n# Indeterminate tests\n")
+     (dorun (map println (results :unknown))))
 
-  (when (seq (results :crashed))
-    (println "\n# Crashed tests\n")
-    (dorun (map println (results :crashed))))
+   (when (seq (results :history-only))
+     (println "\n# History-only tests\n")
+     (dorun (map println (results :history-only))))
+
+   (when (seq (results :crashed))
+     (println "\n# Crashed tests\n")
+     (dorun (map println (results :crashed))))
 
   (when (seq (results false))
     (println "\n# Failed tests\n")
     (dorun (map println (results false))))
 
-  (println)
-  (println (count (results true)) "successes")
-  (println (count (results :unknown)) "unknown")
-  (println (count (results :crashed)) "crashed")
-  (println (count (results false)) "failures")
+   (println)
+   (println (count (results true)) "successes")
+   (println (count (results :unknown)) "unknown")
+   (println (count (results :history-only)) "history-only")
+   (println (count (results :crashed)) "crashed")
+   (println (count (results false)) "failures")
 
   results)
 
